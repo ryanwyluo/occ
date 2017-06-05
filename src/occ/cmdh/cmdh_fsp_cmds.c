@@ -354,11 +354,41 @@ ERRL_RC cmdh_poll_v10(cmdh_fsp_rsp_t * o_rsp_ptr)
     l_sensorHeader.format = 0x01;
     l_sensorHeader.length = sizeof(cmdh_poll_temp_sensor_t);
     l_sensorHeader.count  = 0;
+    
+    uint16_t CpuIpmiId=0;
+    
+    //Check the current OCC
+    //  occ_pres_mask = 0x0F -> CPU0
+    //  occ_pres_mask = 0x02 -> CPU1
+    //  occ_pres_mask = 0x04 -> CPU2
+    //  occ_pres_mask = 0x08 -> CPU3
+    if(l_poll_rsp->occ_pres_mask == 0x02){
+		CpuIpmiId = 0x0D;  //CPU1
+	}
+	else if (l_poll_rsp->occ_pres_mask == 0x04){
+		CpuIpmiId = 0x02;  //CPU2
+	}
+	else if (l_poll_rsp->occ_pres_mask == 0x08){
+		CpuIpmiId = 0x0A;  //CPU3
+	}
+	else{
+		CpuIpmiId = 0x0B;  //CPU0
+	}
 
     //Initialize to max number of possible temperature sensors.
-    cmdh_poll_temp_sensor_t l_tempSensorList[MAX_NUM_CORES + MAX_NUM_MEM_CONTROLLERS + (MAX_NUM_MEM_CONTROLLERS * NUM_DIMMS_PER_CENTAUR)];
+    cmdh_poll_temp_sensor_t l_tempSensorList[MAX_NUM_CORES + MAX_NUM_MEM_CONTROLLERS + (MAX_NUM_MEM_CONTROLLERS * NUM_DIMMS_PER_CENTAUR) + 2]; //Add two items for peak/average core temperature.
     memset(l_tempSensorList, 0x00, sizeof(l_tempSensorList));
 
+    //The average value of core temperature. currently not used.
+    l_tempSensorList[l_sensorHeader.count].id = G_amec_sensor_list[TEMP2MSP0]->ipmi_sid;
+    l_tempSensorList[l_sensorHeader.count].value = G_amec_sensor_list[TEMP2MSP0]->sample;
+    l_sensorHeader.count++;
+    
+    //The peak value of core temperature.
+    l_tempSensorList[l_sensorHeader.count].id = CpuIpmiId;
+    l_tempSensorList[l_sensorHeader.count].value = G_amec_sensor_list[TEMP2MSP0PEAK]->sample;
+    l_sensorHeader.count++;
+    
     for (k=0; k<MAX_NUM_CORES; k++)
     {
         if(CORE_PRESENT(k))
@@ -368,7 +398,7 @@ ERRL_RC cmdh_poll_v10(cmdh_fsp_rsp_t * o_rsp_ptr)
             l_sensorHeader.count++;
         }
     }
-
+    
     uint8_t l_cent, l_dimm = 0;
     for (l_cent=0; l_cent < MAX_NUM_MEM_CONTROLLERS; l_cent++)
     {
